@@ -1,48 +1,64 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LayoutDashboard, Users, FileText } from "lucide-react";
+import { getAdminDashboardStats } from "@/lib/actions/admin-actions"; // Import Action
 
-export default function AdminDashboardPage() {
+// Helper function untuk format waktu relative (Contoh: "2 jam yang lalu")
+function formatTime(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return "Baru saja";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} menit yang lalu`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} jam yang lalu`;
+  return date.toLocaleDateString('id-ID');
+}
+
+export default async function AdminDashboardPage() {
+  // Panggil Data dari Backend
+  const stats = await getAdminDashboardStats();
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-teal-500 mb-6">Dashboard Admin</h2>
 
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1 */}
+        {/* Card Total Kader */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total Kader</p>
             <div className="flex items-center gap-4">
               <LayoutDashboard className="w-8 h-8 opacity-80" />
-              <span className="text-4xl font-bold">15</span>
+              <span className="text-4xl font-bold">{stats.totalKader}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Card 2 */}
+        {/* Card Total User */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total User</p>
             <div className="flex items-center gap-4">
               <Users className="w-8 h-8 opacity-80" />
-              <span className="text-4xl font-bold">120</span>
+              <span className="text-4xl font-bold">{stats.totalUser}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Card 3 */}
+        {/* Card Laporan Masuk */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Laporan Masuk</p>
             <div className="flex items-center gap-4">
               <FileText className="w-8 h-8 opacity-80" />
-              <span className="text-4xl font-bold">5</span>
+              <span className="text-4xl font-bold">{stats.laporanMasuk}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* AKTIVITAS TERBARU */}
+      {/* AKTIVITAS TERBARU (Timeline Real) */}
       <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg font-semibold text-teal-600">Aktivitas Terbaru</CardTitle>
@@ -50,27 +66,24 @@ export default function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6 relative pl-4 border-l-2 border-gray-100">
-            {/* Timeline Item 1 */}
-            <div className="relative">
-              <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-teal-400 ring-4 ring-white"></div>
-              <p className="font-bold text-gray-800 text-sm">Santi (Kader)</p>
-              <p className="text-sm text-gray-600">Login berhasil</p>
-              <p className="text-xs text-gray-400 mt-1">Hari ini 09:30</p>
-            </div>
-            {/* Timeline Item 2 */}
-            <div className="relative">
-              <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-yellow-400 ring-4 ring-white"></div>
-              <p className="font-bold text-gray-800 text-sm">Siti (Kader)</p>
-              <p className="text-sm text-gray-600">Perbarui data Pengguna</p>
-              <p className="text-xs text-gray-400 mt-1">Hari ini 08:15</p>
-            </div>
-            {/* Timeline Item 3 */}
-            <div className="relative">
-              <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-blue-400 ring-4 ring-white"></div>
-              <p className="font-bold text-gray-800 text-sm">Admin (Anggi)</p>
-              <p className="text-sm text-gray-600">Laporan kendala &apos;Selesai&apos;</p>
-              <p className="text-xs text-gray-400 mt-1">Kemarin 17:23</p>
-            </div>
+            {stats.aktivitas.length === 0 ? (
+              <p className="text-gray-400 text-sm italic">Belum ada aktivitas tercatat.</p>
+            ) : (
+              stats.aktivitas.map((log: any) => (
+                <div key={log.id} className="relative">
+                  {/* Dot warna warni sesuai role */}
+                  <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full ring-4 ring-white 
+                    ${log.role === 'Admin' ? 'bg-blue-400' : log.role === 'Kader' ? 'bg-yellow-400' : 'bg-teal-400'}`}>
+                  </div>
+                  
+                  <p className="font-bold text-gray-800 text-sm">
+                    {log.nama_user} <span className="text-xs font-normal text-gray-500">({log.role})</span>
+                  </p>
+                  <p className="text-sm text-gray-600">{log.aktivitas}</p>
+                  <p className="text-xs text-gray-400 mt-1">{formatTime(log.created_at)}</p>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
