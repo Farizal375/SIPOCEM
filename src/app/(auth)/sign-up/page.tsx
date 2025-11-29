@@ -10,10 +10,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Eye, EyeOff, User, Mail, Lock, Phone, MapPin, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useSignUp, useClerk } from "@clerk/nextjs"; 
-// PERBAIKAN: Menghapus import useRouter yang tidak dipakai
 
-const Step1 = ({ onNext, data, onChange, error }: any) => {
+// 1. DEFINISI TIPE DATA (Interface) untuk menghindari 'any'
+interface FormData {
+  nama: string;
+  email: string;
+  password: string;
+  telepon: string;
+  alamat: string;
+  nik: string;
+}
+
+interface StepProps {
+  onNext?: () => void;
+  onBack?: () => void;
+  onSubmit?: () => void;
+  data?: FormData;
+  onChange?: (key: keyof FormData, value: string) => void;
+  error?: string;
+  isLoading?: boolean;
+}
+
+const Step1 = ({ onNext, data, onChange, error }: StepProps) => {
   const [showPass, setShowPass] = useState(false);
+  
+  // Guard clause jika props tidak ada
+  if (!data || !onChange) return null;
+
   return (
     <div className="space-y-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded text-sm flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>}
@@ -49,18 +72,21 @@ const Step1 = ({ onNext, data, onChange, error }: any) => {
   );
 };
 
-const Step2 = ({ onNext, onBack, onChange }: any) => (
-  <div className="space-y-4">
-    <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">IDENTITAS IBU</h3></div>
-    <div className="space-y-2"><Label>NIK</Label><Input onChange={(e) => onChange('nik', e.target.value)} className="border-gray-300" /></div>
-    <div className="pt-4 flex justify-between">
-      <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">Kembali</Button>
-      <Button onClick={onNext} className="bg-[#00BFA6]">Lanjut</Button>
+const Step2 = ({ onNext, onBack, onChange }: StepProps) => {
+  if (!onChange) return null;
+  return (
+    <div className="space-y-4">
+        <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">IDENTITAS IBU</h3></div>
+        <div className="space-y-2"><Label>NIK</Label><Input onChange={(e) => onChange('nik', e.target.value)} className="border-gray-300" /></div>
+        <div className="pt-4 flex justify-between">
+        <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">Kembali</Button>
+        <Button onClick={onNext} className="bg-[#00BFA6]">Lanjut</Button>
+        </div>
     </div>
-  </div>
-);
+  );
+};
 
-const Step6 = ({ onSubmit, onBack, isLoading, error }: any) => (
+const Step6 = ({ onSubmit, onBack, isLoading, error }: StepProps) => (
   <div className="space-y-4">
     <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">KONFIRMASI</h3></div>
     <p className="text-gray-600">Pastikan data yang Anda masukkan sudah benar.</p>
@@ -88,12 +114,13 @@ const SuccessPage = () => (
 );
 
 export default function SignUpPage() {
-  const { isLoaded, signUp, setActive } = useSignUp();
+  // 2. PERBAIKAN: Hapus 'setActive' dari destructuring karena tidak dipakai
+  const { isLoaded, signUp } = useSignUp();
   const { signOut } = useClerk();
   // PERBAIKAN: Menghapus const router = useRouter() karena tidak dipakai
   
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     nama: "", email: "", password: "", telepon: "", alamat: "", nik: ""
   });
   const [error, setError] = useState("");
@@ -103,9 +130,9 @@ export default function SignUpPage() {
     if (isLoaded) {
       signOut();
     }
-  }, [isLoaded]);
+  }, [isLoaded, signOut]);
 
-  const updateForm = (key: string, value: string) => {
+  const updateForm = (key: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
@@ -146,20 +173,25 @@ export default function SignUpPage() {
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
       setStep(7); 
 
-    } catch (err: any) {
+    } catch (err: unknown) { // Menggunakan unknown agar lebih aman
       console.error("Signup error:", err);
-      if (err.errors?.[0]?.code === "form_identifier_exists") {
-        setError("Email sudah terdaftar. Silakan login.");
-      } else if (err.errors?.[0]?.code === "form_password_pwned") {
-        setError("Password terlalu umum/mudah ditebak. Gunakan yang lebih kuat.");
-      } else {
-        if (err.errors?.[0]?.code === "session_exists") {
+      
+      // Type handling untuk error Clerk
+      let errorMessage = "Gagal mendaftar. Coba lagi.";
+      if (typeof err === "object" && err !== null && "errors" in err) {
+          const clerkError = err as { errors: { code: string, message: string }[] };
+          if (clerkError.errors?.[0]?.code === "form_identifier_exists") {
+            errorMessage = "Email sudah terdaftar. Silakan login.";
+          } else if (clerkError.errors?.[0]?.code === "form_password_pwned") {
+            errorMessage = "Password terlalu umum. Gunakan yang lebih kuat.";
+          } else if (clerkError.errors?.[0]?.code === "session_exists") {
              await signOut();
-             setError("Sesi lama terdeteksi. Silakan coba klik Daftar lagi.");
-        } else {
-             setError(err.errors?.[0]?.message || "Gagal mendaftar. Coba lagi.");
-        }
+             errorMessage = "Sesi lama terdeteksi. Silakan coba lagi.";
+          } else {
+             errorMessage = clerkError.errors?.[0]?.message || errorMessage;
+          }
       }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
