@@ -2,8 +2,15 @@
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+// PERBAIKAN: Definisi Interface untuk Props
+interface DataPoint {
+  bulan: string;
+  berat: number;
+  standar: number;
+}
+
 interface GrafikProps {
-  data: any[];
+  data: DataPoint[];
 }
 
 export default function GrafikAnak({ data }: GrafikProps) {

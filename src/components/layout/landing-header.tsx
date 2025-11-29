@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Home, Info, Phone, UserPlus, LogIn } from "lucide-react";
-import { Button } from "@/components/ui/button";
+// PERBAIKAN: Menghapus import { Button } yang tidak terpakai
 
 export default function LandingHeader() {
   return (

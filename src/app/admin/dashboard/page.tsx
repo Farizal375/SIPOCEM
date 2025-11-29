@@ -68,7 +68,7 @@ export default function AdminDashboardPage() {
             <div className="relative">
               <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-blue-400 ring-4 ring-white"></div>
               <p className="font-bold text-gray-800 text-sm">Admin (Anggi)</p>
-              <p className="text-sm text-gray-600">Laporan kendala 'Selesai'</p>
+              <p className="text-sm text-gray-600">Laporan kendala &apos;Selesai&apos;</p>
               <p className="text-xs text-gray-400 mt-1">Kemarin 17:23</p>
             </div>
           </div>

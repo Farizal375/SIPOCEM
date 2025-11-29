@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Download } from "lucide-react";
+import { CheckCircle } from "lucide-react"; // PERBAIKAN: Menghapus 'Download'
 
 export default function UserIbuHamilPage() {
   return (

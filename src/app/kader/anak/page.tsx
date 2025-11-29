@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Edit, Trash2 } from "lucide-react";
-import { createClient } from "@supabase/supabase-js"; // Import Supabase
+import { createClient } from "@supabase/supabase-js";
 
 // Setup Supabase Client
 const supabase = createClient(
@@ -10,24 +10,36 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// PERBAIKAN: Definisi Interface Data Anak agar tidak pakai 'any'
+interface AnakData {
+  id: string;
+  nik: string;
+  nama: string;
+  tgl_lahir: string;
+  jenis_kelamin: string;
+  ibu?: { 
+    nama: string; 
+    alamat: string; 
+  };
+}
+
 // Function untuk mengambil data (Server Component)
 async function getDataAnak() {
   const { data, error } = await supabase
     .from('anak')
     .select(`
       *,
-      ibu (nama, alamat)
-    `); // Join table ke Ibu untuk dapat nama ibu dan alamat
+      ibu:orang_tua_id (nama, alamat) 
+    `); // Pastikan relasi di supabase benar, jika tabel ibu bernama 'orang_tua', sesuaikan disini
   
   if (error) {
     console.error("Error fetching anak:", error);
     return [];
   }
-  return data;
+  return data as unknown as AnakData[]; // Casting ke tipe data kita
 }
 
 export default async function DataAnakPage() {
-  // Panggil data dari database
   const kids = await getDataAnak();
 
   return (
@@ -63,7 +75,8 @@ export default async function DataAnakPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                kids.map((k: any, i: number) => (
+                // PERBAIKAN: Menggunakan interface AnakData dan menghapus index 'i'
+                kids.map((k) => (
                   <TableRow key={k.id} className="border-b">
                     <TableCell>{k.nik}</TableCell>
                     <TableCell>{k.nama}</TableCell>
