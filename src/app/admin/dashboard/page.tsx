@@ -1,8 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LayoutDashboard, Users, FileText } from "lucide-react";
-import { getAdminDashboardStats } from "@/lib/actions/admin-actions"; // Import Action
+import { getAdminDashboardStats } from "@/lib/actions/admin-actions";
 
-// Helper function untuk format waktu relative (Contoh: "2 jam yang lalu")
+// Helper function untuk format waktu relative
 function formatTime(dateString: string) {
   const date = new Date(dateString);
   const now = new Date();
@@ -14,8 +14,16 @@ function formatTime(dateString: string) {
   return date.toLocaleDateString('id-ID');
 }
 
+// Interface untuk Log Aktivitas agar tidak pakai 'any'
+interface LogAktivitas {
+  id: string;
+  nama_user: string;
+  role: string;
+  aktivitas: string;
+  created_at: string;
+}
+
 export default async function AdminDashboardPage() {
-  // Panggil Data dari Backend
   const stats = await getAdminDashboardStats();
 
   return (
@@ -24,7 +32,6 @@ export default async function AdminDashboardPage() {
 
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card Total Kader */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total Kader</p>
@@ -35,7 +42,6 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Card Total User */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total User</p>
@@ -46,7 +52,6 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Card Laporan Masuk */}
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Laporan Masuk</p>
@@ -58,7 +63,7 @@ export default async function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* AKTIVITAS TERBARU (Timeline Real) */}
+      {/* AKTIVITAS TERBARU */}
       <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg font-semibold text-teal-600">Aktivitas Terbaru</CardTitle>
@@ -69,9 +74,9 @@ export default async function AdminDashboardPage() {
             {stats.aktivitas.length === 0 ? (
               <p className="text-gray-400 text-sm italic">Belum ada aktivitas tercatat.</p>
             ) : (
-              stats.aktivitas.map((log: any) => (
+              // Cast data ke interface LogAktivitas
+              (stats.aktivitas as LogAktivitas[]).map((log) => (
                 <div key={log.id} className="relative">
-                  {/* Dot warna warni sesuai role */}
                   <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full ring-4 ring-white 
                     ${log.role === 'Admin' ? 'bg-blue-400' : log.role === 'Kader' ? 'bg-yellow-400' : 'bg-teal-400'}`}>
                   </div>

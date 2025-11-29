@@ -1,18 +1,47 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
-// Setup Supabase Admin Client (Bypass RLS untuk Admin)
+// Setup Supabase Admin Client
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
-  // Catatan: Idealnya gunakan SERVICE_ROLE_KEY di sini untuk admin action yang benar-benar bypass RLS,
-  // tapi untuk starter kit ini kita pakai anon key dengan policy yang sudah kita buat.
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// --- READ (AMBIL DATA) ---
+// --- READ (AMBIL DATA DASHBOARD) ---
+export async function getAdminDashboardStats() {
+  const { count: totalKader } = await supabaseAdmin
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'kader');
+
+  const { count: totalUser } = await supabaseAdmin
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'user');
+
+  const { count: laporanMasuk } = await supabaseAdmin
+    .from('laporan_kendala')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'Pending');
+
+  const { data: aktivitas } = await supabaseAdmin
+    .from('log_aktivitas')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  return {
+    totalKader: totalKader || 0,
+    totalUser: totalUser || 0,
+    laporanMasuk: laporanMasuk || 0,
+    aktivitas: aktivitas || []
+  };
+}
+
+// --- READ (AMBIL SEMUA USER) ---
 export async function getAllUsers() {
   const { data: users, error } = await supabaseAdmin
     .from('users')
@@ -21,19 +50,19 @@ export async function getAllUsers() {
 
   if (error || !users) return [];
 
-  // Join manual untuk ambil detail profil
   const detailedUsers = await Promise.all(users.map(async (u) => {
-    let detail: any = {};
+    // Default values agar tidak error jika data profil belum ada
+    let detail = { nama: 'Belum dilengkapi', telepon: '-', nik: '-' };
     
     if (u.role === 'kader') {
       const { data } = await supabaseAdmin.from('kader').select('nama, telepon').eq('user_id', u.id).single();
-      detail = data || { nama: 'Belum dilengkapi', telepon: '-' };
+      if (data) detail = { ...detail, ...data };
     } else if (u.role === 'user') {
       const { data } = await supabaseAdmin.from('ibu').select('nama, telepon, nik').eq('user_id', u.id).single();
-      detail = data || { nama: 'Belum dilengkapi', telepon: '-', nik: '-' };
+      if (data) detail = { ...detail, ...data };
     } else {
       const { data } = await supabaseAdmin.from('admin').select('nama, telepon').eq('user_id', u.id).single();
-      detail = data || { nama: 'Admin', telepon: '-' };
+      if (data) detail = { ...detail, ...data };
     }
 
     return {
@@ -43,37 +72,37 @@ export async function getAllUsers() {
       status: u.status,
       nama: detail.nama,
       telepon: detail.telepon,
-      nik: detail.nik || '-',
+      nik: detail.nik,
     };
   }));
 
   return detailedUsers;
 }
 
-// --- CREATE (TAMBAH USER BARU KE CLERK & SUPABASE) ---
+// --- CREATE (TAMBAH USER) ---
 export async function createFullUser(formData: FormData) {
-  const client = await clerkClient(); // Await client instance
+  const client = await clerkClient();
 
   const nama = formData.get('nama') as string;
   const email = formData.get('email') as string;
-  const password = formData.get('password') as string; // Input password baru
+  const password = formData.get('password') as string;
   const role = formData.get('role') as string;
   const telepon = formData.get('telepon') as string;
   const nik = formData.get('nik') as string;
 
   try {
-    // 1. Buat User di CLERK
+    // 1. Buat di Clerk
     const clerkUser = await client.users.createUser({
       emailAddress: [email],
       password: password,
-      publicMetadata: { role: role }, // Simpan role di metadata Clerk
+      publicMetadata: { role: role },
       skipPasswordChecks: false,
       skipPasswordRequirement: false,
     });
 
     const userId = clerkUser.id;
 
-    // 2. Simpan ke Tabel Users (Induk) Supabase
+    // 2. Simpan ke Supabase (Tabel Users)
     const { error: userError } = await supabaseAdmin.from('users').insert({
       id: userId,
       email: email,
@@ -82,84 +111,80 @@ export async function createFullUser(formData: FormData) {
     });
 
     if (userError) {
-        // Rollback: Hapus user di Clerk jika gagal simpan di DB
+        // Rollback jika gagal simpan DB
         await client.users.deleteUser(userId);
         return { success: false, message: 'Gagal simpan ke database: ' + userError.message };
     }
 
-    // 3. Simpan ke Tabel Profil (Admin/Kader/Ibu)
-    let profileError;
+    // 3. Simpan ke Tabel Profil
     if (role === 'kader') {
-      const { error } = await supabaseAdmin.from('kader').insert({
+      await supabaseAdmin.from('kader').insert({
         user_id: userId,
         nama: nama,
         telepon: telepon,
         no_registrasi_kohort: '-',
         no_catatan_medik: '-'
       });
-      profileError = error;
     } else if (role === 'user') {
-      const { error } = await supabaseAdmin.from('ibu').insert({
+      await supabaseAdmin.from('ibu').insert({
         user_id: userId,
         nik: nik || `NIK-${Date.now()}`,
         nama: nama,
         telepon: telepon,
-        status_validasi: 'valid' // Admin yang buat, langsung valid
+        status_validasi: 'valid'
       });
-      profileError = error;
     } else if (role === 'admin') {
-       const { error } = await supabaseAdmin.from('admin').insert({
+       await supabaseAdmin.from('admin').insert({
         user_id: userId,
         nama: nama,
         telepon: telepon
       });
-      profileError = error;
-    }
-
-    if (profileError) {
-       console.error("Profile Error:", profileError);
-       // Optional: Rollback logic here
-       return { success: false, message: 'User dibuat tapi profil gagal: ' + profileError.message };
     }
 
     revalidatePath('/admin/akun');
     return { success: true, message: 'Berhasil menambah akun' };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Clerk Error:", error);
-    // Handle error validasi Clerk (misal password kurang panjang, email sudah ada)
-    const errorMessage = error.errors ? error.errors[0].longMessage : error.message;
+    
+    let errorMessage = "Terjadi kesalahan sistem";
+
+    // Type Guard untuk menangani error Clerk tanpa 'any'
+    if (typeof error === "object" && error !== null && "errors" in error) {
+        const clerkError = error as { errors: { longMessage: string }[] };
+        if (Array.isArray(clerkError.errors) && clerkError.errors.length > 0) {
+            errorMessage = clerkError.errors[0].longMessage;
+        }
+    } else if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+
     return { success: false, message: 'Gagal membuat akun: ' + errorMessage };
   }
 }
 
-// --- DELETE (HAPUS DARI CLERK & SUPABASE) ---
+// --- DELETE (HAPUS USER) ---
 export async function deleteFullUser(userId: string) {
   const client = await clerkClient();
 
   try {
-    // 1. Hapus dari Clerk
     await client.users.deleteUser(userId);
-
-    // 2. Hapus dari Supabase (Sebenarnya otomatis jika pakai ON DELETE CASCADE di SQL)
-    // Tapi untuk memastikan, kita jalankan perintah delete
     const { error } = await supabaseAdmin.from('users').delete().eq('id', userId);
 
     if (error) {
-        console.error("Supabase delete error:", error);
         return { success: false, message: "Gagal hapus data database" };
     }
 
     revalidatePath('/admin/akun');
     return { success: true, message: "Akun berhasil dihapus" };
 
-  } catch (error: any) {
-    console.error("Delete Error:", error);
-    return { success: false, message: "Gagal menghapus user: " + error.message };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Gagal menghapus user";
+    return { success: false, message };
   }
 }
 
-// --- UPDATE (EDIT PROFIL DATA) ---
+// --- UPDATE (EDIT USER) ---
 export async function updateUserProfile(formData: FormData) {
   const id = formData.get('id') as string;
   const role = formData.get('role') as string;
@@ -169,8 +194,6 @@ export async function updateUserProfile(formData: FormData) {
 
   let error;
 
-  // Kita hanya update data profil di Supabase (Nama, HP, NIK)
-  // Untuk ganti email/password disarankan lewat fitur "Forgot Password" user sendiri demi keamanan
   if (role === 'kader') {
     const res = await supabaseAdmin.from('kader').update({ nama, telepon }).eq('user_id', id);
     error = res.error;

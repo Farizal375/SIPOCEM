@@ -9,20 +9,66 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, User, Lock, Users } from "lucide-react";
+import { Eye, EyeOff, User, Lock, Users, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSignIn, useClerk } from "@clerk/nextjs"; // 1. Tambahkan useClerk
 
 export default function SignInPage() {
+  const { isLoaded, signIn, setActive } = useSignIn();
+  const { signOut } = useClerk(); // 2. Ambil fungsi signOut
   const router = useRouter();
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("");
+  
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
-    // Simulasi login berdasarkan role
-    if (role === "admin") router.push("/admin/dashboard");
-    else if (role === "kader") router.push("/kader/dashboard");
-    else router.push("/user/dashboard");
+  const handleLogin = async () => {
+    if (!isLoaded) return;
+    setIsLoading(true);
+    setErrorMsg("");
+
+    try {
+      // 3. PERBAIKAN UTAMA: Logout dulu sebelum login baru
+      // Ini mencegah error "You're already signed in"
+      await signOut(); 
+
+      const result = await signIn.create({
+        identifier: email,
+        password,
+      });
+
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId });
+        
+        if (role === "admin") router.push("/admin/dashboard");
+        else if (role === "kader") router.push("/kader/dashboard");
+        else router.push("/user/dashboard");
+      } else {
+        console.log(result);
+        setErrorMsg("Login belum selesai. Periksa metode verifikasi lanjutan.");
+      }
+    } catch (err: any) {
+      console.error("Login error:", err);
+      
+      const code = err.errors?.[0]?.code;
+      if (code === "form_password_incorrect") {
+        setErrorMsg("Kata sandi salah. Silakan coba lagi.");
+      } else if (code === "form_identifier_not_found") {
+        setErrorMsg("Email tidak ditemukan. Silakan daftar terlebih dahulu.");
+      } else if (code === "too_many_attempts") {
+        setErrorMsg("Terlalu banyak percobaan. Silakan tunggu beberapa saat.");
+      } else {
+        // Fallback error message
+        setErrorMsg(err.errors?.[0]?.message || "Terjadi kesalahan sistem.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -30,6 +76,7 @@ export default function SignInPage() {
       <LandingHeader />
       
       <main className="flex-1 flex items-center justify-center pt-24 pb-12 bg-white">
+        {/* ... (Sisa kode UI di bawah ini tetap SAMA persis, tidak perlu diubah) ... */}
         <div className="container px-4">
           
           <div className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
@@ -40,8 +87,7 @@ export default function SignInPage() {
             <CardContent className="p-0">
               {/* Header Card */}
               <div className="bg-[#00BFA6] text-white text-center py-4 rounded-t-lg text-lg font-medium flex items-center justify-center gap-2">
-                <User className="w-5 h-5" />
-                Masuk ke SIPOCEM
+                <User className="w-5 h-5" /> Masuk ke SIPOCEM
               </div>
 
               <div className="p-8 space-y-6">
@@ -53,16 +99,24 @@ export default function SignInPage() {
                   </div>
                 </div>
 
-                {/* Form Inputs */}
+                {errorMsg && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {errorMsg}
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   
                   {/* Username */}
                   <div className="space-y-2">
                     <Label className="text-[#00BFA6] font-semibold flex items-center gap-2 text-base">
-                      <User className="w-5 h-5" /> Username
+                      <User className="w-5 h-5" /> Email
                     </Label>
                     <Input 
-                      placeholder="Masukkan username anda" 
+                      placeholder="Masukkan email anda" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="border-gray-300 h-12 text-base focus-visible:ring-[#00BFA6]" 
                     />
                   </div>
@@ -76,6 +130,8 @@ export default function SignInPage() {
                       <Input 
                         type={showPassword ? "text" : "password"} 
                         placeholder="Masukkan kata sandi anda" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                         className="border-gray-300 h-12 text-base pr-10 focus-visible:ring-[#00BFA6]" 
                       />
                       <button 
@@ -122,8 +178,9 @@ export default function SignInPage() {
                   <Button 
                     className="w-full bg-[#00BFA6] hover:bg-[#00a892] h-12 text-lg font-medium mt-4"
                     onClick={handleLogin}
+                    disabled={isLoading}
                   >
-                    Masuk
+                    {isLoading ? "Memproses..." : "Masuk"}
                   </Button>
 
                   <div className="text-center text-sm pt-2">
