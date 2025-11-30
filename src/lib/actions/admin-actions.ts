@@ -15,28 +15,38 @@ export async function getAdminDashboardStats() {
   const { count: totalKader } = await supabaseAdmin
     .from('users')
     .select('*', { count: 'exact', head: true })
-    .eq('role', 'kader');
+    .eq('role', 'kader')
+    .eq('status', 'aktif');
 
   const { count: totalUser } = await supabaseAdmin
     .from('users')
     .select('*', { count: 'exact', head: true })
-    .eq('role', 'user');
+    .eq('role', 'user')
+    .eq('status', 'aktif');
 
-  const { count: laporanMasuk } = await supabaseAdmin
-    .from('laporan_kendala')
+  const { count: totalAnak } = await supabaseAdmin
+    .from('anak')
+    .select('*', { count: 'exact', head: true });
+
+  const { count: notifikasiPending } = await supabaseAdmin
+    .from('notifikasi')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'Pending');
+    .eq('status', 'pending');
 
   const { data: aktivitas } = await supabaseAdmin
     .from('log_aktivitas')
-    .select('*')
+    .select(`
+      *,
+      users!inner(clerk_user_id, email)
+    `)
     .order('created_at', { ascending: false })
     .limit(5);
 
   return {
     totalKader: totalKader || 0,
     totalUser: totalUser || 0,
-    laporanMasuk: laporanMasuk || 0,
+    totalAnak: totalAnak || 0,
+    notifikasiPending: notifikasiPending || 0,
     aktivitas: aktivitas || []
   };
 }
@@ -45,38 +55,50 @@ export async function getAdminDashboardStats() {
 export async function getAllUsers() {
   const { data: users, error } = await supabaseAdmin
     .from('users')
-    .select('*')
+    .select(`
+      id,
+      clerk_user_id,
+      email,
+      role,
+      status,
+      created_at,
+      admin_profiles!left (*),
+      kader_profiles!left (*),
+      ibu_profiles!left (*)
+    `)
     .order('created_at', { ascending: false });
 
   if (error || !users) return [];
 
-  const detailedUsers = await Promise.all(users.map(async (u) => {
-    // Default values agar tidak error jika data profil belum ada
-    let detail = { nama: 'Belum dilengkapi', telepon: '-', nik: '-' };
-    
-    if (u.role === 'kader') {
-      const { data } = await supabaseAdmin.from('kader').select('nama, telepon').eq('user_id', u.id).single();
-      if (data) detail = { ...detail, ...data };
-    } else if (u.role === 'user') {
-      const { data } = await supabaseAdmin.from('ibu').select('nama, telepon, nik').eq('user_id', u.id).single();
-      if (data) detail = { ...detail, ...data };
-    } else {
-      const { data } = await supabaseAdmin.from('admin').select('nama, telepon').eq('user_id', u.id).single();
-      if (data) detail = { ...detail, ...data };
+  return users.map((u) => {
+    let nama = 'Belum dilengkapi';
+    let telepon = '-';
+    let nik = '-';
+
+    if (u.role === 'admin' && u.admin_profiles) {
+      nama = u.admin_profiles[0]?.nama || 'Belum dilengkapi';
+      telepon = u.admin_profiles[0]?.telepon || '-';
+    } else if (u.role === 'kader' && u.kader_profiles) {
+      nama = u.kader_profiles[0]?.nama || 'Belum dilengkapi';
+      telepon = u.kader_profiles[0]?.telepon || '-';
+    } else if (u.role === 'user' && u.ibu_profiles) {
+      nama = u.ibu_profiles[0]?.nama || 'Belum dilengkapi';
+      telepon = u.ibu_profiles[0]?.telepon || '-';
+      nik = u.ibu_profiles[0]?.nik || '-';
     }
 
     return {
       id: u.id,
+      clerk_user_id: u.clerk_user_id,
       email: u.email,
       role: u.role,
       status: u.status,
-      nama: detail.nama,
-      telepon: detail.telepon,
-      nik: detail.nik,
+      nama,
+      telepon,
+      nik,
+      created_at: u.created_at
     };
-  }));
-
-  return detailedUsers;
+  });
 }
 
 // --- CREATE (TAMBAH USER) ---
@@ -100,45 +122,78 @@ export async function createFullUser(formData: FormData) {
       skipPasswordRequirement: false,
     });
 
-    const userId = clerkUser.id;
+    const clerkUserId = clerkUser.id;
 
     // 2. Simpan ke Supabase (Tabel Users)
-    const { error: userError } = await supabaseAdmin.from('users').insert({
-      id: userId,
-      email: email,
-      role: role,
-      status: 'aktif'
-    });
+    const { data: supabaseUser, error: userError } = await supabaseAdmin
+      .from('users')
+      .insert({
+        clerk_user_id: clerkUserId,
+        email: email,
+        role: role,
+        status: 'aktif'
+      })
+      .select('id')
+      .single();
 
     if (userError) {
         // Rollback jika gagal simpan DB
-        await client.users.deleteUser(userId);
+        await client.users.deleteUser(clerkUserId);
         return { success: false, message: 'Gagal simpan ke database: ' + userError.message };
     }
 
-    // 3. Simpan ke Tabel Profil
+    const userId = supabaseUser.id;
+
+    // 3. Simpan ke Tabel Profil Berdasarkan Role
     if (role === 'kader') {
-      await supabaseAdmin.from('kader').insert({
-        user_id: userId,
-        nama: nama,
-        telepon: telepon,
-        no_registrasi_kohort: '-',
-        no_catatan_medik: '-'
-      });
+      const { error: profileError } = await supabaseAdmin
+        .from('kader_profiles')
+        .insert({
+          user_id: userId,
+          nama: nama,
+          telepon: telepon,
+          no_registrasi_kohort: '-',
+          no_catatan_medik: '-'
+        });
+
+      if (profileError) {
+        // Rollback jika gagal simpan profil
+        await client.users.deleteUser(clerkUserId);
+        await supabaseAdmin.from('users').delete().eq('id', userId);
+        return { success: false, message: 'Gagal simpan profil kader: ' + profileError.message };
+      }
     } else if (role === 'user') {
-      await supabaseAdmin.from('ibu').insert({
-        user_id: userId,
-        nik: nik || `NIK-${Date.now()}`,
-        nama: nama,
-        telepon: telepon,
-        status_validasi: 'valid'
-      });
+      const { error: profileError } = await supabaseAdmin
+        .from('ibu_profiles')
+        .insert({
+          user_id: userId,
+          nik: nik || `NIK-${Date.now()}`,
+          nama: nama,
+          telepon: telepon,
+          status_validasi: 'pending' // Set to pending initially
+        });
+
+      if (profileError) {
+        // Rollback jika gagal simpan profil
+        await client.users.deleteUser(clerkUserId);
+        await supabaseAdmin.from('users').delete().eq('id', userId);
+        return { success: false, message: 'Gagal simpan profil ibu: ' + profileError.message };
+      }
     } else if (role === 'admin') {
-       await supabaseAdmin.from('admin').insert({
-        user_id: userId,
-        nama: nama,
-        telepon: telepon
-      });
+      const { error: profileError } = await supabaseAdmin
+        .from('admin_profiles')
+        .insert({
+          user_id: userId,
+          nama: nama,
+          telepon: telepon
+        });
+
+      if (profileError) {
+        // Rollback jika gagal simpan profil
+        await client.users.deleteUser(clerkUserId);
+        await supabaseAdmin.from('users').delete().eq('id', userId);
+        return { success: false, message: 'Gagal simpan profil admin: ' + profileError.message };
+      }
     }
 
     revalidatePath('/admin/akun');
@@ -146,7 +201,7 @@ export async function createFullUser(formData: FormData) {
 
   } catch (error: unknown) {
     console.error("Clerk Error:", error);
-    
+
     let errorMessage = "Terjadi kesalahan sistem";
 
     // Type Guard untuk menangani error Clerk tanpa 'any'
@@ -164,12 +219,26 @@ export async function createFullUser(formData: FormData) {
 }
 
 // --- DELETE (HAPUS USER) ---
-export async function deleteFullUser(userId: string) {
+export async function deleteFullUser(clerkUserId: string) {
   const client = await clerkClient();
 
   try {
-    await client.users.deleteUser(userId);
-    const { error } = await supabaseAdmin.from('users').delete().eq('id', userId);
+    // Get user ID from our users table
+    const { data: user, error: userFetchError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', clerkUserId)
+      .single();
+
+    if (userFetchError || !user) {
+      return { success: false, message: "User tidak ditemukan" };
+    }
+
+    // Delete from Clerk
+    await client.users.deleteUser(clerkUserId);
+
+    // Delete from our users table (this will cascade delete related profiles)
+    const { error } = await supabaseAdmin.from('users').delete().eq('id', user.id);
 
     if (error) {
         return { success: false, message: "Gagal hapus data database" };
@@ -191,21 +260,41 @@ export async function updateUserProfile(formData: FormData) {
   const nama = formData.get('nama') as string;
   const telepon = formData.get('telepon') as string;
   const nik = formData.get('nik') as string;
+  const status = formData.get('status') as string;
 
-  let error;
+  // Update user status in users table
+  const { error: userError } = await supabaseAdmin
+    .from('users')
+    .update({ status })
+    .eq('id', id);
 
-  if (role === 'kader') {
-    const res = await supabaseAdmin.from('kader').update({ nama, telepon }).eq('user_id', id);
-    error = res.error;
-  } else if (role === 'user') {
-    const res = await supabaseAdmin.from('ibu').update({ nama, telepon, nik }).eq('user_id', id);
-    error = res.error;
-  } else if (role === 'admin') {
-    const res = await supabaseAdmin.from('admin').update({ nama, telepon }).eq('user_id', id);
-    error = res.error;
+  if (userError) {
+    return { success: false, message: userError.message };
   }
 
-  if (error) return { success: false, message: error.message };
+  // Update profile based on role
+  let profileError;
+  if (role === 'admin') {
+    const res = await supabaseAdmin
+      .from('admin_profiles')
+      .update({ nama, telepon })
+      .eq('user_id', id);
+    profileError = res.error;
+  } else if (role === 'kader') {
+    const res = await supabaseAdmin
+      .from('kader_profiles')
+      .update({ nama, telepon })
+      .eq('user_id', id);
+    profileError = res.error;
+  } else if (role === 'user') {
+    const res = await supabaseAdmin
+      .from('ibu_profiles')
+      .update({ nama, telepon, nik })
+      .eq('user_id', id);
+    profileError = res.error;
+  }
+
+  if (profileError) return { success: false, message: profileError.message };
 
   revalidatePath('/admin/akun');
   return { success: true, message: "Data berhasil diperbarui" };

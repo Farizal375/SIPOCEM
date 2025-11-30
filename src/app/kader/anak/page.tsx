@@ -2,45 +2,20 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Edit, Trash2 } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
+import { getAllAnak } from "@/lib/actions/kader-actions";
 
-// Setup Supabase Client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// PERBAIKAN: Definisi Interface Data Anak agar tidak pakai 'any'
 interface AnakData {
   id: string;
   nik: string;
   nama: string;
   tgl_lahir: string;
   jenis_kelamin: string;
-  ibu?: { 
-    nama: string; 
-    alamat: string; 
-  };
-}
-
-// Function untuk mengambil data (Server Component)
-async function getDataAnak() {
-  const { data, error } = await supabase
-    .from('anak')
-    .select(`
-      *,
-      ibu:orang_tua_id (nama, alamat) 
-    `); // Pastikan relasi di supabase benar, jika tabel ibu bernama 'orang_tua', sesuaikan disini
-  
-  if (error) {
-    console.error("Error fetching anak:", error);
-    return [];
-  }
-  return data as unknown as AnakData[]; // Casting ke tipe data kita
+  nama_ibu?: string;
+  alamat?: string;
 }
 
 export default async function DataAnakPage() {
-  const kids = await getDataAnak();
+  const kids: AnakData[] = await getAllAnak();
 
   return (
     <div className="space-y-6">
@@ -75,15 +50,14 @@ export default async function DataAnakPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                // PERBAIKAN: Menggunakan interface AnakData dan menghapus index 'i'
                 kids.map((k) => (
                   <TableRow key={k.id} className="border-b">
                     <TableCell>{k.nik}</TableCell>
                     <TableCell>{k.nama}</TableCell>
                     <TableCell>{k.tgl_lahir}</TableCell>
-                    <TableCell>{k.jenis_kelamin}</TableCell>
-                    <TableCell>{k.ibu?.nama || '-'}</TableCell> 
-                    <TableCell>{k.ibu?.alamat || '-'}</TableCell>
+                    <TableCell className="capitalize">{k.jenis_kelamin}</TableCell>
+                    <TableCell>{k.nama_ibu || '-'}</TableCell>
+                    <TableCell>{k.alamat || '-'}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-2">
                         <Button variant="ghost" size="icon" className="h-7 w-7 border border-blue-300 text-blue-400"><Edit className="w-3.5 h-3.5" /></Button>

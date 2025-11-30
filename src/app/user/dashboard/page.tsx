@@ -1,14 +1,17 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bell, AlertCircle, Info } from "lucide-react";
+import { getJadwalPosyanduTerdekat } from "@/lib/actions/user-actions";
 
-export default function UserDashboard() {
+export default async function UserDashboard() {
+  const jadwal = await getJadwalPosyanduTerdekat();
+
   return (
     <div className="space-y-6">
       {/* Header Info */}
       <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
         <span>Halo, Dini Andini</span>
-        <span>Hari ini, 25 November 2025</span>
+        <span>Hari ini, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
       </div>
 
       <h2 className="text-2xl font-bold text-[#00BFA6] mb-6">Dashboard User</h2>
@@ -63,19 +66,25 @@ export default function UserDashboard() {
       <div className="space-y-2">
         <h3 className="font-bold text-black text-sm">Jadwal Posyandu Terdekat</h3>
         <Card className="border shadow-sm">
-          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-            <div>
-              <p className="text-gray-600">Siti (Kader)</p>
-              <p className="font-bold text-gray-800">Posyandu Cempaka</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Sabtu, 29 November 2025</p>
-              <p className="font-bold text-gray-800">Posyandu Cempaka</p>
-            </div>
-            <div className="text-right font-bold text-gray-700">
-              +6212345678901
-            </div>
-          </CardContent>
+          {jadwal.length > 0 ? (
+            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+              <div>
+                <p className="text-gray-600">{jadwal[0].nama_kader} (Kader)</p>
+                <p className="font-bold text-gray-800">{jadwal[0].tempat}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">{new Date(jadwal[0].tanggal_posyandu).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <p className="font-bold text-gray-800">{jadwal[0].tempat}</p>
+              </div>
+              <div className="text-right font-bold text-gray-700">
+                {jadwal[0].telepon_kader || '+6212345678901'}
+              </div>
+            </CardContent>
+          ) : (
+            <CardContent className="p-6 text-center text-gray-500">
+              Tidak ada jadwal posyandu terdekat
+            </CardContent>
+          )}
         </Card>
       </div>
 

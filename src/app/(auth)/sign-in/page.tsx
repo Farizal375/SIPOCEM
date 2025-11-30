@@ -12,18 +12,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, User, Lock, Users, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSignIn, useClerk } from "@clerk/nextjs"; // 1. Tambahkan useClerk
+import { useSignIn, useClerk } from "@clerk/nextjs";
 
 export default function SignInPage() {
   const { isLoaded, signIn, setActive } = useSignIn();
-  const { signOut } = useClerk(); // 2. Ambil fungsi signOut
+  const { signOut } = useClerk();
   const router = useRouter();
-  
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("");
-  
+
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,9 +32,7 @@ export default function SignInPage() {
     setErrorMsg("");
 
     try {
-      // 3. PERBAIKAN UTAMA: Logout dulu sebelum login baru
-      // Ini mencegah error "You're already signed in"
-      await signOut(); 
+      await signOut();
 
       const result = await signIn.create({
         identifier: email,
@@ -44,28 +41,37 @@ export default function SignInPage() {
 
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        
-        if (role === "admin") router.push("/admin/dashboard");
-        else if (role === "kader") router.push("/kader/dashboard");
-        else router.push("/user/dashboard");
+
+        // Redirect to role-check page which will determine user role and redirect appropriately
+        router.push("/role-check");
+
       } else {
         console.log(result);
         setErrorMsg("Login belum selesai. Periksa metode verifikasi lanjutan.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Login error:", err);
-      
-      const code = err.errors?.[0]?.code;
-      if (code === "form_password_incorrect") {
-        setErrorMsg("Kata sandi salah. Silakan coba lagi.");
-      } else if (code === "form_identifier_not_found") {
-        setErrorMsg("Email tidak ditemukan. Silakan daftar terlebih dahulu.");
-      } else if (code === "too_many_attempts") {
-        setErrorMsg("Terlalu banyak percobaan. Silakan tunggu beberapa saat.");
-      } else {
-        // Fallback error message
-        setErrorMsg(err.errors?.[0]?.message || "Terjadi kesalahan sistem.");
+
+      let errorMessage = "Terjadi kesalahan sistem.";
+
+      if (typeof err === "object" && err !== null && "errors" in err) {
+          const clerkError = err as { errors: { code: string; message: string }[] };
+          const code = clerkError.errors?.[0]?.code;
+
+          if (code === "form_password_incorrect") {
+            errorMessage = "Kata sandi salah. Silakan coba lagi.";
+          } else if (code === "form_identifier_not_found") {
+            errorMessage = "Email tidak ditemukan. Silakan daftar terlebih dahulu.";
+          } else if (code === "too_many_attempts") {
+            errorMessage = "Terlalu banyak percobaan. Silakan tunggu beberapa saat.";
+          } else {
+            errorMessage = clerkError.errors?.[0]?.message || errorMessage;
+          }
+      } else if (err instanceof Error) {
+          errorMessage = err.message;
       }
+
+      setErrorMsg(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -76,22 +82,18 @@ export default function SignInPage() {
       <LandingHeader />
       
       <main className="flex-1 flex items-center justify-center pt-24 pb-12 bg-white">
-        {/* ... (Sisa kode UI di bawah ini tetap SAMA persis, tidak perlu diubah) ... */}
         <div className="container px-4">
-          
           <div className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
             <Link href="/" className="hover:underline">Beranda</Link> / Masuk
           </div>
 
           <Card className="border border-gray-300 shadow-lg max-w-md mx-auto">
             <CardContent className="p-0">
-              {/* Header Card */}
               <div className="bg-[#00BFA6] text-white text-center py-4 rounded-t-lg text-lg font-medium flex items-center justify-center gap-2">
                 <User className="w-5 h-5" /> Masuk ke SIPOCEM
               </div>
 
               <div className="p-8 space-y-6">
-                {/* Logo Tengah */}
                 <div className="flex justify-center mb-6">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-[#00BFA6] font-bold text-xs">S</div>
@@ -107,8 +109,6 @@ export default function SignInPage() {
                 )}
 
                 <div className="space-y-4">
-                  
-                  {/* Username */}
                   <div className="space-y-2">
                     <Label className="text-[#00BFA6] font-semibold flex items-center gap-2 text-base">
                       <User className="w-5 h-5" /> Email
@@ -121,7 +121,6 @@ export default function SignInPage() {
                     />
                   </div>
 
-                  {/* Password */}
                   <div className="space-y-2">
                     <Label className="text-[#00BFA6] font-semibold flex items-center gap-2 text-base">
                       <Lock className="w-5 h-5" /> Kata Sandi
@@ -143,24 +142,7 @@ export default function SignInPage() {
                     </div>
                   </div>
 
-                  {/* Role Dropdown */}
-                  <div className="space-y-2">
-                    <Label className="text-[#00BFA6] font-semibold flex items-center gap-2 text-base">
-                      <Users className="w-5 h-5" /> Role
-                    </Label>
-                    <Select onValueChange={setRole}>
-                      <SelectTrigger className="h-12 border-gray-300 text-base focus:ring-[#00BFA6]">
-                        <SelectValue placeholder="Pilih Role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="kader">Kader</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
 
-                  {/* Remember & Forgot Password */}
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center space-x-2">
                       <Checkbox id="remember" className="border-[#00BFA6] data-[state=checked]:bg-[#00BFA6]" />
@@ -168,13 +150,11 @@ export default function SignInPage() {
                         Ingat saya
                       </label>
                     </div>
-                    {/* BAGIAN YANG DIPERBAIKI ADA DI SINI */}
                     <Link href="/forgot-password" className="text-sm text-[#00BFA6] hover:underline">
                       Lupa Password?
                     </Link>
                   </div>
 
-                  {/* Submit Button */}
                   <Button 
                     className="w-full bg-[#00BFA6] hover:bg-[#00a892] h-12 text-lg font-medium mt-4"
                     onClick={handleLogin}
@@ -189,14 +169,12 @@ export default function SignInPage() {
                       Daftar sekarang
                     </Link>
                   </div>
-
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
       </main>
-
       <LandingFooter />
     </div>
   );

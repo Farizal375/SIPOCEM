@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus } from "lucide-react";
 
-export default function PemeriksaanIbuPage() {
+export default function PemeriksaanIbuHamilPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-[#00BFA6] mb-6">Pemeriksaan Ibu Hamil</h2>

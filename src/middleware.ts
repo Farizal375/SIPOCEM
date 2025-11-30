@@ -3,10 +3,13 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // Tentukan rute mana yang BOLEH diakses tanpa login (public)
 // Sesuaikan dengan halaman landing page, sign-in, dan sign-up Anda
 const isPublicRoute = createRouteMatcher([
-  '/', 
-  '/sign-in(.*)', 
+  '/',
+  '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/webhooks(.*)'
+  '/api/webhooks(.*)',
+  '/role-check(.*)',
+  '/role-redirect(.*)',
+  '/forgot-password(.*)'
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

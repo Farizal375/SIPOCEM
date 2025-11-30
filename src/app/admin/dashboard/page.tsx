@@ -21,6 +21,7 @@ interface LogAktivitas {
   role: string;
   aktivitas: string;
   created_at: string;
+  email: string;
 }
 
 export default async function AdminDashboardPage() {
@@ -31,7 +32,7 @@ export default async function AdminDashboardPage() {
       <h2 className="text-2xl font-bold text-teal-500 mb-6">Dashboard Admin</h2>
 
       {/* STATS CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total Kader</p>
@@ -54,10 +55,20 @@ export default async function AdminDashboardPage() {
 
         <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
           <CardContent className="p-6">
-            <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Laporan Masuk</p>
+            <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Total Anak</p>
+            <div className="flex items-center gap-4">
+              <Users className="w-8 h-8 opacity-80" />
+              <span className="text-4xl font-bold">{stats.totalAnak}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-[#5FBCC0] text-white border-none shadow-md">
+          <CardContent className="p-6">
+            <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">Notifikasi</p>
             <div className="flex items-center gap-4">
               <FileText className="w-8 h-8 opacity-80" />
-              <span className="text-4xl font-bold">{stats.laporanMasuk}</span>
+              <span className="text-4xl font-bold">{stats.notifikasiPending}</span>
             </div>
           </CardContent>
         </Card>

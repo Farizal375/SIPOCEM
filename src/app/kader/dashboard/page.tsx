@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { LayoutDashboard, Users } from "lucide-react";
+import { LayoutDashboard, Users, Calendar } from "lucide-react";
 import { getKaderStats, getGrafikBeratBadan } from "@/lib/actions/dashboard-actions";
 import GrafikAnak from "@/components/dashboard/grafik-anak";
 
@@ -13,7 +13,7 @@ export default async function KaderDashboard() {
       <h2 className="text-2xl font-bold text-[#00BFA6] mb-6">Dashboard Kader</h2>
 
       {/* STATS CARDS (Dinamis dari Database) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-[#74C9D3] text-white border-none shadow-md h-32 relative overflow-hidden">
           <CardContent className="p-6">
             <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-90">TOTAL ANAK</p>
@@ -29,6 +29,15 @@ export default async function KaderDashboard() {
             <div className="flex items-center gap-4">
               <Users className="w-8 h-8 opacity-90" />
               <span className="text-4xl font-bold">{stats.totalOrangTua}</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-[#74C9D3] text-white border-none shadow-md h-32 relative overflow-hidden">
+          <CardContent className="p-6">
+            <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-90">JADWAL HARI INI</p>
+            <div className="flex items-center gap-4">
+              <Calendar className="w-8 h-8 opacity-90" />
+              <span className="text-4xl font-bold">{stats.jadwalHariIni}</span>
             </div>
           </CardContent>
         </Card>

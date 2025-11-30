@@ -19,6 +19,7 @@ interface FormData {
   telepon: string;
   alamat: string;
   nik: string;
+  role: string;
 }
 
 interface StepProps {
@@ -72,12 +73,37 @@ const Step1 = ({ onNext, data, onChange, error }: StepProps) => {
   );
 };
 
-const Step2 = ({ onNext, onBack, onChange }: StepProps) => {
+const Step2 = ({ onNext, onBack, data, onChange }: StepProps) => {
   if (!onChange) return null;
   return (
     <div className="space-y-4">
-        <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">IDENTITAS IBU</h3></div>
-        <div className="space-y-2"><Label>NIK</Label><Input onChange={(e) => onChange('nik', e.target.value)} className="border-gray-300" /></div>
+        <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">PILIH PERAN</h3></div>
+        <div className="space-y-2">
+          <Label className="text-[#00BFA6] font-semibold">Peran Akun</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <button
+              onClick={() => onChange('role', 'user')}
+              className={`border rounded-lg p-4 text-center ${data?.role === 'user' ? 'border-[#00BFA6] bg-[#00BFA6] text-white' : 'border-gray-300'}`}
+            >
+              <div className="text-lg mb-1">👤</div>
+              <div>User</div>
+            </button>
+            <button
+              onClick={() => onChange('role', 'kader')}
+              className={`border rounded-lg p-4 text-center ${data?.role === 'kader' ? 'border-[#00BFA6] bg-[#00BFA6] text-white' : 'border-gray-300'}`}
+            >
+              <div className="text-lg mb-1">⚕️</div>
+              <div>Kader</div>
+            </button>
+            <button
+              onClick={() => onChange('role', 'admin')}
+              className={`border rounded-lg p-4 text-center ${data?.role === 'admin' ? 'border-[#00BFA6] bg-[#00BFA6] text-white' : 'border-gray-300'}`}
+            >
+              <div className="text-lg mb-1">👑</div>
+              <div>Admin</div>
+            </button>
+          </div>
+        </div>
         <div className="pt-4 flex justify-between">
         <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">Kembali</Button>
         <Button onClick={onNext} className="bg-[#00BFA6]">Lanjut</Button>
@@ -86,7 +112,50 @@ const Step2 = ({ onNext, onBack, onChange }: StepProps) => {
   );
 };
 
-const Step6 = ({ onSubmit, onBack, isLoading, error }: StepProps) => (
+const Step3 = ({ onNext, onBack, data, onChange }: StepProps) => {
+  if (!onChange || !data) return null;
+
+  // Show NIK input only for user role
+  if (data.role === 'user') {
+    return (
+      <div className="space-y-4">
+          <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">IDENTITAS</h3></div>
+          <div className="space-y-2">
+            <Label>NIK</Label>
+            <Input
+              value={data.nik}
+              onChange={(e) => onChange('nik', e.target.value)}
+              className="border-gray-300"
+              placeholder="Nomor Induk Kependudukan"
+            />
+          </div>
+          <div className="pt-4 flex justify-between">
+          <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">Kembali</Button>
+          <Button onClick={onNext} className="bg-[#00BFA6]">Lanjut</Button>
+          </div>
+      </div>
+    );
+  } else {
+    // For non-users, skip to confirmation
+    return (
+      <div className="space-y-4">
+          <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">KONFIRMASI</h3></div>
+          <p className="text-gray-600">Data yang akan Anda daftarkan:</p>
+          <div className="bg-gray-100 p-4 rounded">
+              <p>Peran: <span className="font-semibold">{data.role === 'admin' ? 'Admin' : 'Kader'}</span></p>
+              <p>Nama: <span className="font-semibold">{data.nama}</span></p>
+              <p>Email: <span className="font-semibold">{data.email}</span></p>
+          </div>
+          <div className="pt-4 flex justify-between">
+          <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">Kembali</Button>
+          <Button onClick={onNext} className="bg-[#00BFA6]">Lanjut</Button>
+          </div>
+      </div>
+    );
+  }
+};
+
+const Step4 = ({ onSubmit, onBack, isLoading, error }: StepProps) => (
   <div className="space-y-4">
     <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">KONFIRMASI</h3></div>
     <p className="text-gray-600">Pastikan data yang Anda masukkan sudah benar.</p>
@@ -121,7 +190,7 @@ export default function SignUpPage() {
   
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
-    nama: "", email: "", password: "", telepon: "", alamat: "", nik: ""
+    nama: "", email: "", password: "", telepon: "", alamat: "", nik: "", role: "user"
   });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -147,6 +216,18 @@ export default function SignUpPage() {
             return;
         }
     }
+    if (step === 2) {
+      // For admin role, skip to confirmation
+      if (formData.role === 'admin') {
+        setStep(4);
+        return;
+      }
+    }
+    if (step === 3 && formData.role !== 'user') {
+      // For non-user roles, skip to confirmation
+      setStep(4);
+      return;
+    }
     setError("");
     setStep(step + 1);
   };
@@ -163,10 +244,10 @@ export default function SignUpPage() {
         emailAddress: formData.email,
         password: formData.password,
         firstName: formData.nama,
-        unsafeMetadata: { 
-            role: 'user', 
+        publicMetadata: {
+            role: 'user',
             telepon: formData.telepon,
-            alamat: formData.alamat 
+            alamat: formData.alamat
         }
       });
 
@@ -202,7 +283,7 @@ export default function SignUpPage() {
       <LandingHeader />
       <main className="flex-1 flex items-center justify-center pt-24 pb-10 bg-white">
         <div className="container px-4 max-w-2xl mx-auto">
-            {step < 7 && (
+            {step < 5 && (
                 <div className="text-sm text-gray-500 mb-6">
                 <Link href="/" className="hover:underline">Beranda</Link> / Daftar
                 </div>
@@ -210,9 +291,10 @@ export default function SignUpPage() {
             <Card className="border border-gray-300 shadow-lg">
                 <CardContent className="p-8">
                     {step === 1 && <Step1 onNext={handleNext} data={formData} onChange={updateForm} error={error} />}
-                    {step >= 2 && step <= 5 && <Step2 onNext={handleNext} onBack={() => setStep(step-1)} onChange={updateForm} />} 
-                    {step === 6 && <Step6 onSubmit={handleRegister} onBack={() => setStep(step-1)} isLoading={isLoading} error={error} />}
-                    {step === 7 && <SuccessPage />}
+                    {step === 2 && <Step2 onNext={handleNext} onBack={() => setStep(step-1)} data={formData} onChange={updateForm} />}
+                    {step === 3 && <Step3 onNext={handleNext} onBack={() => setStep(step-1)} data={formData} onChange={updateForm} />}
+                    {step === 4 && <Step4 onSubmit={handleRegister} onBack={() => setStep(step-1)} isLoading={isLoading} error={error} />}
+                    {step === 5 && <SuccessPage />}
                 </CardContent>
             </Card>
         </div>
