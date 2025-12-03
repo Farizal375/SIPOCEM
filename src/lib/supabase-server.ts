@@ -1,37 +1,52 @@
 import { createClient } from "@supabase/supabase-js";
-import { headers } from "next/headers";
-import { cache } from "react";
+import { auth } from "@clerk/nextjs/server";
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// Service role client for server actions that require elevated privileges
+// 1. Client Admin (Bypass RLS - Hati-hati!)
+// Gunakan hanya untuk tugas admin sistem, bukan untuk request user biasa
 export function createAdminSupabaseClient() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is missing");
+  }
+
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // This key should have service role privileges
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
   );
 }
 
-// Server-only client with RLS bypass (for server actions)
-// This is created as a cached function to prevent multiple instantiations
-export const getServerSupabase = cache(() => {
-  // For server actions, we might want to use service role key
-  // Or pass user's session token to maintain RLS
-  const headersList = headers();
-  const authorization = headersList.get("authorization");
-  
+// 2. Client Server dengan Auth User (Respect RLS)
+// Gunakan ini di Server Actions atau Server Components
+export async function getServerSupabase() {
+  // Next.js 15: auth() bersifat async
+  const { getToken } = await auth();
+
+  // Ambil token JWT khusus dari Clerk yang sudah di-sign untuk Supabase
+  const token = await getToken({ template: "supabase" });
+
+  if (!token) {
+    // Jika tidak ada user login, kembalikan client anonim (public access only)
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+
+  // Jika user login, inject token ke header Authorization
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       global: {
         headers: {
-          authorization: authorization || "",
+          Authorization: `Bearer ${token}`,
         },
       },
     }
   );
-});
+}
