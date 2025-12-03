@@ -11,7 +11,6 @@ import { Eye, EyeOff, User, Mail, Lock, Phone, MapPin, AlertCircle } from "lucid
 import Link from "next/link";
 import { useSignUp, useClerk } from "@clerk/nextjs"; 
 
-// 1. DEFINISI TIPE DATA (Interface) untuk menghindari 'any'
 interface FormData {
   nama: string;
   email: string;
@@ -30,12 +29,11 @@ interface StepProps {
   onChange?: (key: keyof FormData, value: string) => void;
   error?: string;
   isLoading?: boolean;
+  onVerify?: (code: string) => void;
 }
 
 const Step1 = ({ onNext, data, onChange, error }: StepProps) => {
   const [showPass, setShowPass] = useState(false);
-  
-  // Guard clause jika props tidak ada
   if (!data || !onChange) return null;
 
   return (
@@ -92,7 +90,7 @@ const Step2 = ({ onNext, onBack, data, onChange }: StepProps) => {
               onClick={() => onChange('role', 'kader')}
               className={`border rounded-lg p-4 text-center ${data?.role === 'kader' ? 'border-[#00BFA6] bg-[#00BFA6] text-white' : 'border-gray-300'}`}
             >
-              <div className="text-lg mb-1">⚕️</div>
+              <div className="text-lg mb-1">⚕</div>
               <div>Kader</div>
             </button>
             <button
@@ -114,8 +112,6 @@ const Step2 = ({ onNext, onBack, data, onChange }: StepProps) => {
 
 const Step3 = ({ onNext, onBack, data, onChange }: StepProps) => {
   if (!onChange || !data) return null;
-
-  // Show NIK input only for user role
   if (data.role === 'user') {
     return (
       <div className="space-y-4">
@@ -136,7 +132,6 @@ const Step3 = ({ onNext, onBack, data, onChange }: StepProps) => {
       </div>
     );
   } else {
-    // For non-users, skip to confirmation
     return (
       <div className="space-y-4">
           <div className="border-b pb-2 mb-4"><h3 className="text-lg font-bold">KONFIRMASI</h3></div>
@@ -173,6 +168,43 @@ const Step4 = ({ onSubmit, onBack, isLoading, error }: StepProps) => (
   </div>
 );
 
+const StepOTP = ({ onVerify, onBack, isLoading, error }: StepProps) => {
+  const [code, setCode] = useState("");
+  return (
+    <div className="space-y-4">
+      <div className="border-b pb-2 mb-4">
+        <h3 className="text-lg font-bold">VERIFIKASI EMAIL</h3>
+      </div>
+
+      <p className="text-gray-600">
+        Kode OTP telah dikirim ke email Anda. Masukkan kode untuk melanjutkan.
+      </p>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded text-sm flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      <Input
+        placeholder="Masukkan kode OTP"
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        className="border-[#00BFA6]"
+      />
+
+      <div className="pt-4 flex justify-between">
+        <Button variant="outline" onClick={onBack} className="border-[#00BFA6] text-[#00BFA6]">
+          Kembali
+        </Button>
+        <Button onClick={() => onVerify?.(code)} disabled={isLoading} className="bg-[#00BFA6]">
+          {isLoading ? "Memproses..." : "Verifikasi"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const SuccessPage = () => (
   <div className="text-center space-y-6 py-10">
     <h2 className="text-xl font-bold">Pendaftaran Berhasil!</h2>
@@ -183,11 +215,9 @@ const SuccessPage = () => (
 );
 
 export default function SignUpPage() {
-  // 2. PERBAIKAN: Hapus 'setActive' dari destructuring karena tidak dipakai
   const { isLoaded, signUp } = useSignUp();
   const { signOut } = useClerk();
-  // PERBAIKAN: Menghapus const router = useRouter() karena tidak dipakai
-  
+
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
     nama: "", email: "", password: "", telepon: "", alamat: "", nik: "", role: "user"
@@ -195,12 +225,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (isLoaded) {
-      signOut();
-    }
-  }, [isLoaded, signOut]);
-
+  // helper
   const updateForm = (key: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
@@ -217,14 +242,12 @@ export default function SignUpPage() {
         }
     }
     if (step === 2) {
-      // For admin role, skip to confirmation
       if (formData.role === 'admin') {
         setStep(4);
         return;
       }
     }
     if (step === 3 && formData.role !== 'user') {
-      // For non-user roles, skip to confirmation
       setStep(4);
       return;
     }
@@ -233,46 +256,76 @@ export default function SignUpPage() {
   };
 
   const handleRegister = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || !signUp) {
+      setError("Clerk belum siap. Coba sebentar lagi.");
+      return;
+    }
     setIsLoading(true);
     setError("");
 
     try {
-      await signOut();
-
+      // DO NOT signOut() here — must keep signUp instance
       await signUp.create({
         emailAddress: formData.email,
         password: formData.password,
         firstName: formData.nama,
         publicMetadata: {
-            role: 'user',
+            role: formData.role,
             telepon: formData.telepon,
-            alamat: formData.alamat
+            alamat: formData.alamat,
+            nik: formData.role === "user" ? formData.nik : null
         }
       });
 
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-      setStep(7); 
+      // DEBUG: lihat objek signUp di console
+      console.debug("signUp after create:", signUp);
 
-    } catch (err: unknown) { // Menggunakan unknown agar lebih aman
+      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+
+      setStep(5); // show OTP input
+    } catch (err: any) {
       console.error("Signup error:", err);
-      
-      // Type handling untuk error Clerk
       let errorMessage = "Gagal mendaftar. Coba lagi.";
-      if (typeof err === "object" && err !== null && "errors" in err) {
-          const clerkError = err as { errors: { code: string, message: string }[] };
-          if (clerkError.errors?.[0]?.code === "form_identifier_exists") {
-            errorMessage = "Email sudah terdaftar. Silakan login.";
-          } else if (clerkError.errors?.[0]?.code === "form_password_pwned") {
-            errorMessage = "Password terlalu umum. Gunakan yang lebih kuat.";
-          } else if (clerkError.errors?.[0]?.code === "session_exists") {
-             await signOut();
-             errorMessage = "Sesi lama terdeteksi. Silakan coba lagi.";
-          } else {
-             errorMessage = clerkError.errors?.[0]?.message || errorMessage;
-          }
+      if (err?.errors?.[0]?.code === "form_identifier_exists") {
+        errorMessage = "Email sudah terdaftar. Silakan login.";
+      } else if (err?.errors?.[0]?.message) {
+        errorMessage = err.errors[0].message;
       }
       setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerify = async (rawCode: string) => {
+    if (!isLoaded || !signUp) {
+      setError("Clerk belum siap untuk verifikasi.");
+      return;
+    }
+    setIsLoading(true);
+    setError("");
+
+    const code = String(rawCode || "").trim(); // trim — penting
+
+    try {
+      console.debug("Attempting verification with code:", code);
+      const attempt = await signUp.attemptEmailAddressVerification({ code });
+
+      console.debug("verification attempt:", attempt);
+
+      // some Clerk SDKs return status string; handle both shapes
+      const status = (attempt as any)?.status || (attempt as any)?.verification?.status;
+      if (status === "complete" || (attempt as any)?.verifications?.emailAddress?.status === "verified") {
+        setStep(6);
+      } else {
+        // provide Clerk raw message when possible
+        const clerkMsg = (attempt as any)?.errors?.[0]?.message || (attempt as any)?.message;
+        setError(clerkMsg || "Kode OTP salah atau kadaluarsa.");
+      }
+    } catch (err: any) {
+      console.error("Verify error:", err);
+      const clerkErr = err?.errors?.[0]?.message || err?.message || JSON.stringify(err);
+      setError(clerkErr || "Verifikasi gagal. Pastikan kode benar.");
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +347,15 @@ export default function SignUpPage() {
                     {step === 2 && <Step2 onNext={handleNext} onBack={() => setStep(step-1)} data={formData} onChange={updateForm} />}
                     {step === 3 && <Step3 onNext={handleNext} onBack={() => setStep(step-1)} data={formData} onChange={updateForm} />}
                     {step === 4 && <Step4 onSubmit={handleRegister} onBack={() => setStep(step-1)} isLoading={isLoading} error={error} />}
-                    {step === 5 && <SuccessPage />}
+                    {step === 5 && (
+                      <StepOTP 
+                        onVerify={handleVerify}
+                        onBack={() => setStep(4)}
+                        isLoading={isLoading}
+                        error={error}
+                      />
+                    )}
+                    {step === 6 && <SuccessPage />}
                 </CardContent>
             </Card>
         </div>

@@ -1,3 +1,4 @@
+/* ini yg sign-in */
 "use client";
 
 import { useState } from "react";
@@ -32,7 +33,7 @@ export default function SignInPage() {
     setErrorMsg("");
 
     try {
-      await signOut();
+      await signOut(); 
 
       const result = await signIn.create({
         identifier: email,
